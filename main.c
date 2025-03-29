@@ -75,6 +75,7 @@ typedef enum {
     NODE_FOR,
     NODE_BINARY_OP,
     NODE_UNARY_OP,
+    NODE_PARAMETER,
     NODE_VARIABLE,
     NODE_LITERAL,
     NODE_TUPLE,
@@ -154,6 +155,12 @@ typedef struct AstNode {
             char* value;
             DataType type;
         } literal;
+
+        // Function parameter
+        struct {
+            char* name;
+            DataType type;
+        } parameter;
     } value;
 } AstNode;
 
@@ -294,7 +301,14 @@ static TokenType identifier_type(Lexer* lexer) {
     switch (lexer->source[lexer->start]) {
         case 'f': return check_keyword(lexer, 1, 0, "", TOKEN_FUNCTION);
         case 'r': return check_keyword(lexer, 1, 5, "eturn", TOKEN_RETURN);
-        case 'i': return check_keyword(lexer, 1, 1, "f", TOKEN_IF);
+        case 'i':
+            if (lexer->current - lexer->start > 1) {
+                switch (lexer->source[lexer->start + 1]) {
+                    case 'f': return check_keyword(lexer, 1, 1, "f", TOKEN_IF);
+                    case 'n': return check_keyword(lexer, 1, 2, "nt", TOKEN_I32);
+                }
+            }
+            break;
         case 'n': return check_keyword(lexer, 1, 3, "ull", TOKEN_NULL);
         case 'e':
             if (lexer->current - lexer->start > 1) {
@@ -391,17 +405,6 @@ static bool match_parser(Parser* parser, TokenType type) {
     return true;
 }
 
-static void error_at_current(Parser* parser, const char* message) {
-    if (parser->panic_mode) return;
-    parser->panic_mode = true;
-    parser->had_error = true;
-
-    fprintf(stderr, "[line %d] Error at '%s': %s\n",
-            parser->current.line,
-            parser->current.lexeme,
-            message);
-}
-
 static void error(Parser* parser, const char* message) {
     if (parser->panic_mode) return;
     parser->panic_mode = true;
@@ -413,10 +416,48 @@ static void error(Parser* parser, const char* message) {
             message);
 }
 
+static void free_ast(AstNode* node) {
+    if (node == NULL) return;
+
+    switch (node->type) {
+        case NODE_FUNCTION:
+            free(node->value.function.name);
+            for (int i = 0; i < node->value.function.param_count; i++) {
+                free_ast(node->value.function.parameters[i]);
+            }
+            free(node->value.function.parameters);
+            free(node->value.function.body);
+            free(node->value.function.return_types);
+            break;
+        case NODE_RETURN:
+            free_ast(node->value.return_stmt.return_value);
+            break;
+        case NODE_BINARY_OP:
+            free_ast(node->value.binary_op.left);
+            free_ast(node->value.binary_op.right);
+            break;
+        case NODE_VARIABLE:
+            free(node->value.variable.name);
+            free_ast(node->value.variable.init_value);
+            break;
+        case NODE_PARAMETER:
+            free(node->value.parameter.name);
+            break;
+        case NODE_TUPLE:
+            for (int i = 0; i < node->value.tuple.value_count; i++) {
+                free_ast(node->value.tuple.values[i]);
+            }
+            free(node->value.tuple.values);
+            break;
+    }
+    free(node);
+}
+
 static AstNode* parse_expression(Parser* parser);
 static AstNode* parse_statement(Parser* parser);
 static AstNode* parse_declaration(Parser* parser);
 static AstNode* parse_return_statement(Parser* parser);
+static AstNode* parse_parameter(Parser* parser);
 
 static AstNode* parse_function(Parser* parser) {
     if (!match_parser(parser, TOKEN_FUNCTION)) {
@@ -443,8 +484,30 @@ static AstNode* parse_function(Parser* parser) {
     node->value.function.param_count = 0;
 
     if (!check(parser, TOKEN_RIGHT_PAREN)) {
+        int capacity = 8;
+        node->value.function.parameters = malloc(sizeof(AstNode*) * capacity);
+
         do {
-            // TODO: Парсинг параметров
+            if (node->value.function.param_count == capacity) {
+                capacity *= 2;
+                node->value.function.parameters = realloc(
+                        node->value.function.parameters,
+                        sizeof(AstNode*) * capacity
+                );
+            }
+
+            AstNode* param = parse_parameter(parser);
+            if (param == NULL) {
+                for (int i = 0; i < node->value.function.param_count; i++) {
+                    free_ast(node->value.function.parameters[i]);
+                }
+                free(node->value.function.parameters);
+                free_ast(node);
+                return NULL;
+            }
+
+            node->value.function.parameters[node->value.function.param_count++] = param;
+
         } while (match_parser(parser, TOKEN_COMMA));
     }
 
@@ -500,6 +563,8 @@ static AstNode* parse_function(Parser* parser) {
                 node->value.function.return_types[node->value.function.return_type_count++] = TYPE_U32;
             } else if (match_parser(parser, TOKEN_U64)) {
                 node->value.function.return_types[node->value.function.return_type_count++] = TYPE_U64;
+            } else if (match_parser(parser, TOKEN_IDENTIFIER) && strcmp(parser->previous.lexeme, "int") == 0) {
+                node->value.function.return_types[node->value.function.return_type_count++] = TYPE_I32;
             } else {
                 error(parser, "Expected return type");
                 return NULL;
@@ -543,6 +608,8 @@ static AstNode* parse_function(Parser* parser) {
             node->value.function.return_types[0] = TYPE_U32;
         } else if (match_parser(parser, TOKEN_U64)) {
             node->value.function.return_types[0] = TYPE_U64;
+        } else if (match_parser(parser, TOKEN_IDENTIFIER) && strcmp(parser->previous.lexeme, "int") == 0) {
+            node->value.function.return_types[0] = TYPE_I32;
         } else {
             error(parser, "Expected return type");
             return NULL;
@@ -640,38 +707,57 @@ static AstNode* parse_return_statement(Parser* parser) {
     return node;
 }
 
-static void free_ast(AstNode* node) {
-    if (node == NULL) return;
-
-    switch (node->type) {
-        case NODE_FUNCTION:
-            free(node->value.function.name);
-            for (int i = 0; i < node->value.function.param_count; i++) {
-                free_ast(node->value.function.parameters[i]);
-            }
-            free(node->value.function.parameters);
-            free(node->value.function.body);
-            free(node->value.function.return_types);
-            break;
-        case NODE_RETURN:
-            free_ast(node->value.return_stmt.return_value);
-            break;
-        case NODE_BINARY_OP:
-            free_ast(node->value.binary_op.left);
-            free_ast(node->value.binary_op.right);
-            break;
-        case NODE_VARIABLE:
-            free(node->value.variable.name);
-            free_ast(node->value.variable.init_value);
-            break;
-        case NODE_TUPLE:
-            for (int i = 0; i < node->value.tuple.value_count; i++) {
-                free_ast(node->value.tuple.values[i]);
-            }
-            free(node->value.tuple.values);
-            break;
+static AstNode* parse_parameter(Parser* parser) {
+    if (!match_parser(parser, TOKEN_IDENTIFIER)) {
+        error(parser, "Expected parameter name");
+        return NULL;
     }
-    free(node);
+
+    AstNode* param = malloc(sizeof(AstNode));
+    param->type = NODE_PARAMETER;
+    param->value.parameter.name = strdup(parser->previous.lexeme);
+
+    if (!match_parser(parser, TOKEN_COLON)) {
+        error(parser, "Expected ':' after parameter name");
+        free_ast(param);
+        return NULL;
+    }
+
+    if (match_parser(parser, TOKEN_U8)) {
+        param->value.parameter.type = TYPE_U8;
+    } else if (match_parser(parser, TOKEN_U16)) {
+        param->value.parameter.type = TYPE_U16;
+    } else if (match_parser(parser, TOKEN_U32)) {
+        param->value.parameter.type = TYPE_U32;
+    } else if (match_parser(parser, TOKEN_U64)) {
+        param->value.parameter.type = TYPE_U64;
+    } else if (match_parser(parser, TOKEN_I8)) {
+        param->value.parameter.type = TYPE_I8;
+    } else if (match_parser(parser, TOKEN_I16)) {
+        param->value.parameter.type = TYPE_I16;
+    } else if (match_parser(parser, TOKEN_I32)) {
+        param->value.parameter.type = TYPE_I32;
+    } else if (match_parser(parser, TOKEN_I64)) {
+        param->value.parameter.type = TYPE_I64;
+    } else if (match_parser(parser, TOKEN_F32)) {
+        param->value.parameter.type = TYPE_F32;
+    } else if (match_parser(parser, TOKEN_F64)) {
+        param->value.parameter.type = TYPE_F64;
+    } else if (match_parser(parser, TOKEN_STR)) {
+        param->value.parameter.type = TYPE_STR;
+    } else if (match_parser(parser, TOKEN_BOOL)) {
+        param->value.parameter.type = TYPE_BOOL;
+    } else if (match_parser(parser, TOKEN_NULL)) {
+        param->value.parameter.type = TYPE_NULL;
+    } else if (match_parser(parser, TOKEN_IDENTIFIER) && strcmp(parser->previous.lexeme, "int") == 0) {
+        param->value.parameter.type = TYPE_I32;
+    } else {
+        error(parser, "Expected parameter type");
+        free_ast(param);
+        return NULL;
+    }
+
+    return param;
 }
 
 static const char* node_type_to_string(NodeType type) {
@@ -685,6 +771,7 @@ static const char* node_type_to_string(NodeType type) {
         case NODE_BINARY_OP: return "BINARY_OP";
         case NODE_UNARY_OP: return "UNARY_OP";
         case NODE_VARIABLE: return "VARIABLE";
+        case NODE_PARAMETER: return "PARAMETER";
         case NODE_LITERAL: return "LITERAL";
         case NODE_TUPLE: return "TUPLE";
         default: return "UNKNOWN";
@@ -721,7 +808,17 @@ static void print_ast_node(AstNode* node, int depth) {
 
     switch (node->type) {
         case NODE_FUNCTION:
-            printf(" '%s' returns (", node->value.function.name);
+            printf(" '%s' (", node->value.function.name);
+
+            for (int i = 0; i < node->value.function.param_count; i++) {
+                if (i > 0) printf(", ");
+                AstNode* param = node->value.function.parameters[i];
+                printf("%s: %s",
+                       param->value.parameter.name,
+                       data_type_to_string(param->value.parameter.type));
+            }
+            printf(") returns (");
+
             for (int i = 0; i < node->value.function.return_type_count; i++) {
                 if (i > 0) printf(", ");
                 printf("%s", data_type_to_string(node->value.function.return_types[i]));
