@@ -6,15 +6,15 @@
 // Token types
 typedef enum {
     // Keywords
-    TOKEN_FUNCTION,    // 'f'
-    TOKEN_RETURN,      // 'return'
-    TOKEN_IF,          // 'if'
-    TOKEN_ELSIF,       // 'elsif'
-    TOKEN_ELSE,        // 'else'
-    TOKEN_WHILE,       // 'while'
-    TOKEN_FOR,         // 'for'
-    TOKEN_BREAK,       // 'break'
-    TOKEN_CONTINUE,    // 'continue'
+    TOKEN_FUNCTION,     // 'f'
+    TOKEN_RETURN,       // 'return'
+    TOKEN_IF,           // 'if'
+    TOKEN_ELSIF,        // 'elsif'
+    TOKEN_ELSE,         // 'else'
+    TOKEN_WHILE,        // 'while'
+    TOKEN_FOR,          // 'for'
+    TOKEN_BREAK,        // 'break'
+    TOKEN_CONTINUE,     // 'continue'
 
     // Types
     TOKEN_U8,
@@ -33,28 +33,32 @@ typedef enum {
     TOKEN_ERROR,
 
     // Operators
-    TOKEN_PLUS,        // +
-    TOKEN_MINUS,       // -
-    TOKEN_MULTIPLY,    // *
-    TOKEN_DIVIDE,      // /
-    TOKEN_MODULO,      // %
-    TOKEN_INCREMENT,   // ++
-    TOKEN_DECREMENT,   // --
+    TOKEN_PLUS,          // +
+    TOKEN_MINUS,         // -
+    TOKEN_MULTIPLY,      // *
+    TOKEN_DIVIDE,        // /
+    TOKEN_MODULO,        // %
+    TOKEN_INCREMENT,     // ++
+    TOKEN_DECREMENT,     // --
+    TOKEN_GREATER,       // >
+    TOKEN_GREATER_EQUAL, // >=
+    TOKEN_LESS,          // <
+    TOKEN_LESS_EQUAL,    // <=
 
     // Other tokens
     TOKEN_IDENTIFIER,
     TOKEN_NUMBER,
     TOKEN_STRING,
-    TOKEN_COLON,       // :
-    TOKEN_ARROW,       // ->
-    TOKEN_EQUALS,      // =
+    TOKEN_COLON,         // :
+    TOKEN_ARROW,         // ->
+    TOKEN_EQUALS,        // =
     TOKEN_EOF,
     TOKEN_LEFT_PAREN,    // (
     TOKEN_RIGHT_PAREN,   // )
     TOKEN_LEFT_BRACE,    // {
     TOKEN_RIGHT_BRACE,   // }
     TOKEN_COMMA,         // ,
-    TOKEN_DOT,          // .
+    TOKEN_DOT,           // .
     TOKEN_TUPLE_TYPE,
 } TokenType;
 
@@ -161,6 +165,12 @@ typedef struct AstNode {
             char* name;
             DataType type;
         } parameter;
+
+        // Unary operator
+        struct {
+            TokenType operator;
+            struct AstNode* operand;
+        } unary_op;
     } value;
 } AstNode;
 
@@ -383,9 +393,21 @@ Token scan_token(Lexer* lexer) {
         case '-':
             if (match_lexer(lexer, '>')) return make_token(lexer, TOKEN_ARROW);
             return make_token(lexer, TOKEN_MINUS);
-        case '+': return make_token(lexer, TOKEN_PLUS);
+        case '+':
+            if (match_lexer(lexer, '+')) return make_token(lexer, TOKEN_INCREMENT);
+            return make_token(lexer, TOKEN_PLUS);
         case '*': return make_token(lexer, TOKEN_MULTIPLY);
         case '/': return make_token(lexer, TOKEN_DIVIDE);
+        case '%': return make_token(lexer, TOKEN_MODULO);
+        case '=':
+            if (match_lexer(lexer, '=')) return make_token(lexer, TOKEN_EQUALS);
+            return make_token(lexer, TOKEN_EQUALS);
+        case '>':
+            if (match_lexer(lexer, '=')) return make_token(lexer, TOKEN_GREATER_EQUAL);
+            return make_token(lexer, TOKEN_GREATER);
+        case '<':
+            if (match_lexer(lexer, '=')) return make_token(lexer, TOKEN_LESS_EQUAL);
+            return make_token(lexer, TOKEN_LESS);
         case '"': return string(lexer);
     }
 
@@ -474,6 +496,12 @@ static void free_ast(AstNode* node) {
             }
             free(node->value.tuple.values);
             break;
+        case NODE_UNARY_OP:
+            free_ast(node->value.unary_op.operand);
+            break;
+        case NODE_LITERAL:
+            free(node->value.literal.value);
+            break;
     }
     free(node);
 }
@@ -483,6 +511,151 @@ static AstNode* parse_statement(Parser* parser);
 static AstNode* parse_declaration(Parser* parser);
 static AstNode* parse_return_statement(Parser* parser);
 static AstNode* parse_parameter(Parser* parser);
+static AstNode* parse_primary(Parser* parser);
+static AstNode* parse_unary(Parser* parser);
+static AstNode* parse_factor(Parser* parser);
+static AstNode* parse_term(Parser* parser);
+static AstNode* parse_comparison(Parser* parser);
+static AstNode* parse_equality(Parser* parser);
+
+static AstNode* make_binary_op(AstNode* left, TokenType operator, AstNode* right) {
+    AstNode* node = malloc(sizeof(AstNode));
+    node->type = NODE_BINARY_OP;
+    node->value.binary_op.left = left;
+    node->value.binary_op.right = right;
+    node->value.binary_op.operator = operator;
+    return node;
+}
+
+static AstNode* parse_literal(Parser* parser) {
+    AstNode* node = malloc(sizeof(AstNode));
+    node->type = NODE_LITERAL;
+
+    switch (parser->current.type) {
+        case TOKEN_NUMBER:
+            node->value.literal.value = strdup(parser->current.lexeme);
+            node->value.literal.type = TYPE_I32;
+            advance_parser(parser);
+            break;
+        case TOKEN_STRING:
+            node->value.literal.value = strdup(parser->current.lexeme);
+            node->value.literal.type = TYPE_STR;
+            advance_parser(parser);
+            break;
+        case TOKEN_NULL:
+            node->value.literal.value = strdup("null");
+            node->value.literal.type = TYPE_NULL;
+            advance_parser(parser);
+            break;
+        case TOKEN_IDENTIFIER:
+            node->value.literal.value = strdup(parser->current.lexeme);
+            node->value.literal.type = TYPE_I32;
+            advance_parser(parser);
+            break;
+        default:
+            free(node);
+            return NULL;
+    }
+
+    return node;
+}
+
+static AstNode* parse_primary(Parser* parser) {
+    if (match_parser(parser, TOKEN_LEFT_PAREN)) {
+        AstNode* expr = parse_expression(parser);
+        if (!match_parser(parser, TOKEN_RIGHT_PAREN)) {
+            error(parser, "Expected ')' after expression");
+            return NULL;
+        }
+        return expr;
+    }
+
+    if (match_parser(parser, TOKEN_NUMBER) ||
+        match_parser(parser, TOKEN_STRING) ||
+        match_parser(parser, TOKEN_NULL) ||
+        match_parser(parser, TOKEN_IDENTIFIER)) {
+        AstNode* node = malloc(sizeof(AstNode));
+        node->type = NODE_LITERAL;
+        node->value.literal.value = strdup(parser->previous.lexeme);
+        node->value.literal.type = TYPE_I32;
+        return node;
+    }
+
+    error(parser, "Expected expression");
+    return NULL;
+}
+
+static AstNode* parse_unary(Parser* parser) {
+    if (match_parser(parser, TOKEN_MINUS) ||
+        match_parser(parser, TOKEN_PLUS) ||
+        match_parser(parser, TOKEN_INCREMENT) ||
+        match_parser(parser, TOKEN_DECREMENT)) {
+        TokenType operator = parser->previous.type;
+        AstNode* right = parse_unary(parser);
+
+        AstNode* node = malloc(sizeof(AstNode));
+        node->type = NODE_UNARY_OP;
+        node->value.unary_op.operator = operator;
+        node->value.unary_op.operand = right;
+        return node;
+    }
+
+    return parse_primary(parser);
+}
+
+static AstNode* parse_factor(Parser* parser) {
+    AstNode* left = parse_unary(parser);
+
+    while (match_parser(parser, TOKEN_MULTIPLY) ||
+           match_parser(parser, TOKEN_DIVIDE) ||
+           match_parser(parser, TOKEN_MODULO)) {
+        TokenType operator = parser->previous.type;
+        AstNode* right = parse_unary(parser);
+        left = make_binary_op(left, operator, right);
+    }
+
+    return left;
+}
+
+static AstNode* parse_term(Parser* parser) {
+    AstNode* left = parse_factor(parser);
+
+    while (match_parser(parser, TOKEN_PLUS) ||
+           match_parser(parser, TOKEN_MINUS)) {
+        TokenType operator = parser->previous.type;
+        AstNode* right = parse_factor(parser);
+        left = make_binary_op(left, operator, right);
+    }
+
+    return left;
+}
+
+static AstNode* parse_equality(Parser* parser) {
+    AstNode* expr = parse_comparison(parser);
+
+    while (match_parser(parser, TOKEN_EQUALS)) {
+        TokenType operator = parser->previous.type;
+        AstNode* right = parse_comparison(parser);
+        expr = make_binary_op(expr, operator, right);
+    }
+
+    return expr;
+}
+
+static AstNode* parse_comparison(Parser* parser) {
+    AstNode* expr = parse_term(parser);
+
+    while (match_parser(parser, TOKEN_GREATER) ||
+           match_parser(parser, TOKEN_GREATER_EQUAL) ||
+           match_parser(parser, TOKEN_LESS) ||
+           match_parser(parser, TOKEN_LESS_EQUAL)) {
+        TokenType operator = parser->previous.type;
+        AstNode* right = parse_term(parser);
+        expr = make_binary_op(expr, operator, right);
+    }
+
+    return expr;
+}
 
 static AstNode* parse_function(Parser* parser) {
     if (!match_parser(parser, TOKEN_FUNCTION)) {
@@ -651,46 +824,8 @@ static AstNode* parse_function(Parser* parser) {
     return node;
 }
 
-static AstNode* parse_literal(Parser* parser) {
-    AstNode* node = malloc(sizeof(AstNode));
-    node->type = NODE_LITERAL;
-
-    switch (parser->current.type) {
-        case TOKEN_NUMBER:
-            node->value.literal.value = strdup(parser->current.lexeme);
-            node->value.literal.type = TYPE_I32;
-            advance_parser(parser);
-            break;
-        case TOKEN_STRING:
-            node->value.literal.value = strdup(parser->current.lexeme);
-            node->value.literal.type = TYPE_STR;
-            advance_parser(parser);
-            break;
-        case TOKEN_NULL:
-            node->value.literal.value = strdup("null");
-            node->value.literal.type = TYPE_NULL;
-            advance_parser(parser);
-            break;
-        case TOKEN_IDENTIFIER:
-            node->value.literal.value = strdup(parser->current.lexeme);
-            node->value.literal.type = TYPE_I32;
-            advance_parser(parser);
-            break;
-        default:
-            free(node);
-            return NULL;
-    }
-
-    return node;
-}
-
 static AstNode* parse_expression(Parser* parser) {
-    AstNode* literal = parse_literal(parser);
-    if (literal != NULL) return literal;
-
-    // TODO: добавить обработку других выражений
-    error(parser, "Expected expression");
-    return NULL;
+    return parse_equality(parser);
 }
 
 static AstNode* parse_statement(Parser* parser) {
@@ -722,13 +857,20 @@ static AstNode* parse_return_statement(Parser* parser) {
 
         if (!match_parser(parser, TOKEN_RIGHT_PAREN)) {
             error(parser, "Expected ')' after return values");
+            free(values);
+            free(node);
             return NULL;
         }
 
-        node->value.return_stmt.return_value = malloc(sizeof(AstNode));
-        node->value.return_stmt.return_value->type = NODE_TUPLE;
-        node->value.return_stmt.return_value->value.tuple.values = values;
-        node->value.return_stmt.return_value->value.tuple.value_count = count;
+        if (count > 1) {
+            node->value.return_stmt.return_value = malloc(sizeof(AstNode));
+            node->value.return_stmt.return_value->type = NODE_TUPLE;
+            node->value.return_stmt.return_value->value.tuple.values = values;
+            node->value.return_stmt.return_value->value.tuple.value_count = count;
+        } else {
+            node->value.return_stmt.return_value = values[0];
+            free(values);
+        }
     } else {
         // Single-value return
         node->value.return_stmt.return_value = parse_expression(parser);
@@ -856,23 +998,54 @@ static void print_ast_node(AstNode* node, int depth) {
             printf(")\n");
             print_ast_node(node->value.function.body, depth + 1);
             break;
-
         case NODE_RETURN:
             printf("\n");
             print_ast_node(node->value.return_stmt.return_value, depth + 1);
             break;
-
         case NODE_TUPLE:
             printf(" with %d values:\n", node->value.tuple.value_count);
             for (int i = 0; i < node->value.tuple.value_count; i++) {
                 print_ast_node(node->value.tuple.values[i], depth + 1);
             }
             break;
-
         case NODE_LITERAL:
             printf(" = %s\n", node->value.literal.value);
             break;
-
+        case NODE_BINARY_OP:
+            printf(" operator: ");
+            switch (node->value.binary_op.operator) {
+                case TOKEN_PLUS: printf("+"); break;
+                case TOKEN_MINUS: printf("-"); break;
+                case TOKEN_MULTIPLY: printf("*"); break;
+                case TOKEN_DIVIDE: printf("/"); break;
+                case TOKEN_MODULO: printf("%%"); break;
+                case TOKEN_GREATER: printf(">"); break;
+                case TOKEN_GREATER_EQUAL: printf(">="); break;
+                case TOKEN_LESS: printf("<"); break;
+                case TOKEN_LESS_EQUAL: printf("<="); break;
+                case TOKEN_EQUALS: printf("=="); break;
+                default: printf("unknown(%d)", node->value.binary_op.operator);
+            }
+            printf("\n");
+            for (int i = 0; i < depth + 1; i++) printf("  ");
+            printf("Left:\n");
+            print_ast_node(node->value.binary_op.left, depth + 2);
+            for (int i = 0; i < depth + 1; i++) printf("  ");
+            printf("Right:\n");
+            print_ast_node(node->value.binary_op.right, depth + 2);
+            break;
+        case NODE_UNARY_OP:
+            printf(" operator: ");
+            switch (node->value.unary_op.operator) {
+                case TOKEN_MINUS: printf("-"); break;
+                case TOKEN_PLUS: printf("+"); break;
+                case TOKEN_INCREMENT: printf("++"); break;
+                case TOKEN_DECREMENT: printf("--"); break;
+                default: printf("unknown");
+            }
+            printf("\n");
+            print_ast_node(node->value.unary_op.operand, depth + 1);
+            break;
         default:
             printf("\n");
     }
@@ -922,6 +1095,30 @@ int main(void) {
 
     const char* test6 = "f get_name() -> str:\n    return \"John\"";
     run_test(test6, "Function with string return");
+
+    const char* test7 = "f calc() -> i32:\n    return 2 + 3 * 4";
+    run_test(test7, "Function with arithmetic expression");
+
+    const char* test8 = "f compare(x: int, y: int) -> bool:\n    return x > y + 5";
+    run_test(test8, "Function with comparison expression");
+
+    const char* test9 = "f complex() -> i32:\n    return (2 + 3) * (4 - 1)";
+    run_test(test9, "Function with parenthesized expression");
+
+    const char* test10 = "f unary() -> i32:\n    return -5 + +3";
+    run_test(test10, "Function with unary operators");
+
+    const char* test11 = "f mixed() -> bool:\n    return 10 * 5 >= 45 + 5";
+    run_test(test11, "Function with mixed operators");
+
+    const char* test12 = "f increment(x: int) -> int:\n    return ++x";
+    run_test(test12, "Function with increment operator");
+
+    const char* test13 = "f priority() -> i32:\n    return 1 + 2 * 3 - 4 / 2";
+    run_test(test13, "Function testing operator precedence");
+
+    const char* test14 = "f complex_expr(a: int, b: int) -> bool:\n    return (a + b) * 2 >= 10 - 5";
+    run_test(test14, "Function with complex expression");
 
     return 0;
 }
