@@ -299,17 +299,32 @@ static TokenType check_keyword(Lexer* lexer, int start, int length,
 
 static TokenType identifier_type(Lexer* lexer) {
     switch (lexer->source[lexer->start]) {
-        case 'f': return check_keyword(lexer, 1, 0, "", TOKEN_FUNCTION);
         case 'r': return check_keyword(lexer, 1, 5, "eturn", TOKEN_RETURN);
         case 'i':
             if (lexer->current - lexer->start > 1) {
                 switch (lexer->source[lexer->start + 1]) {
                     case 'f': return check_keyword(lexer, 1, 1, "f", TOKEN_IF);
                     case 'n': return check_keyword(lexer, 1, 2, "nt", TOKEN_I32);
+                    case '3': return check_keyword(lexer, 1, 2, "32", TOKEN_I32);
+                    case '1': return check_keyword(lexer, 1, 2, "16", TOKEN_I16);
+                    case '6': return check_keyword(lexer, 1, 2, "64", TOKEN_I64);
+                    case '8': return check_keyword(lexer, 1, 1, "8", TOKEN_I8);
+                }
+            }
+            break;
+        case 'u':
+            if (lexer->current - lexer->start > 1) {
+                switch (lexer->source[lexer->start + 1]) {
+                    case '8': return check_keyword(lexer, 1, 1, "8", TOKEN_U8);
+                    case '1': return check_keyword(lexer, 1, 2, "16", TOKEN_U16);
+                    case '3': return check_keyword(lexer, 1, 2, "32", TOKEN_U32);
+                    case '6': return check_keyword(lexer, 1, 2, "64", TOKEN_U64);
                 }
             }
             break;
         case 'n': return check_keyword(lexer, 1, 3, "ull", TOKEN_NULL);
+        case 's': return check_keyword(lexer, 1, 2, "tr", TOKEN_STR);
+        case 'b': return check_keyword(lexer, 1, 3, "ool", TOKEN_BOOL);
         case 'e':
             if (lexer->current - lexer->start > 1) {
                 switch (lexer->source[lexer->start + 1]) {
@@ -325,6 +340,16 @@ static TokenType identifier_type(Lexer* lexer) {
                     case 'r':
                         return check_keyword(lexer, 1, 4, "rror", TOKEN_ERROR);
                 }
+            }
+            break;
+        case 'f':
+            if (lexer->current - lexer->start > 1) {
+                switch (lexer->source[lexer->start + 1]) {
+                    case '3': return check_keyword(lexer, 1, 2, "32", TOKEN_F32);
+                    case '6': return check_keyword(lexer, 1, 2, "64", TOKEN_F64);
+                }
+            } else {
+                return check_keyword(lexer, 1, 0, "", TOKEN_FUNCTION);
             }
             break;
     }
@@ -644,6 +669,11 @@ static AstNode* parse_literal(Parser* parser) {
         case TOKEN_NULL:
             node->value.literal.value = strdup("null");
             node->value.literal.type = TYPE_NULL;
+            advance_parser(parser);
+            break;
+        case TOKEN_IDENTIFIER:
+            node->value.literal.value = strdup(parser->current.lexeme);
+            node->value.literal.type = TYPE_I32;
             advance_parser(parser);
             break;
         default:
