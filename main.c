@@ -148,6 +148,12 @@ typedef struct AstNode {
             struct AstNode** values;
             int value_count;
         } tuple;
+
+        // Literal value
+        struct {
+            char* value;
+            DataType type;
+        } literal;
     } value;
 } AstNode;
 
@@ -553,8 +559,40 @@ static AstNode* parse_function(Parser* parser) {
     return node;
 }
 
+static AstNode* parse_literal(Parser* parser) {
+    AstNode* node = malloc(sizeof(AstNode));
+    node->type = NODE_LITERAL;
+
+    switch (parser->current.type) {
+        case TOKEN_NUMBER:
+            node->value.literal.value = strdup(parser->current.lexeme);
+            node->value.literal.type = TYPE_I32;
+            advance_parser(parser);
+            break;
+        case TOKEN_STRING:
+            node->value.literal.value = strdup(parser->current.lexeme);
+            node->value.literal.type = TYPE_STR;
+            advance_parser(parser);
+            break;
+        case TOKEN_NULL:
+            node->value.literal.value = strdup("null");
+            node->value.literal.type = TYPE_NULL;
+            advance_parser(parser);
+            break;
+        default:
+            free(node);
+            return NULL;
+    }
+
+    return node;
+}
+
 static AstNode* parse_expression(Parser* parser) {
-    // TODO: Implement expression parsing
+    AstNode* literal = parse_literal(parser);
+    if (literal != NULL) return literal;
+
+    // TODO: добавить обработку других выражений
+    error(parser, "Expected expression");
     return NULL;
 }
 
@@ -636,6 +674,83 @@ static void free_ast(AstNode* node) {
     free(node);
 }
 
+static const char* node_type_to_string(NodeType type) {
+    switch (type) {
+        case NODE_FUNCTION: return "FUNCTION";
+        case NODE_BLOCK: return "BLOCK";
+        case NODE_RETURN: return "RETURN";
+        case NODE_IF: return "IF";
+        case NODE_WHILE: return "WHILE";
+        case NODE_FOR: return "FOR";
+        case NODE_BINARY_OP: return "BINARY_OP";
+        case NODE_UNARY_OP: return "UNARY_OP";
+        case NODE_VARIABLE: return "VARIABLE";
+        case NODE_LITERAL: return "LITERAL";
+        case NODE_TUPLE: return "TUPLE";
+        default: return "UNKNOWN";
+    }
+}
+
+static const char* data_type_to_string(DataType type) {
+    switch (type) {
+        case TYPE_U8: return "u8";
+        case TYPE_U16: return "u16";
+        case TYPE_U32: return "u32";
+        case TYPE_U64: return "u64";
+        case TYPE_I8: return "i8";
+        case TYPE_I16: return "i16";
+        case TYPE_I32: return "i32";
+        case TYPE_I64: return "i64";
+        case TYPE_F32: return "f32";
+        case TYPE_F64: return "f64";
+        case TYPE_STR: return "str";
+        case TYPE_BOOL: return "bool";
+        case TYPE_NULL: return "null";
+        case TYPE_ERROR: return "error";
+        case TYPE_TUPLE: return "tuple";
+        default: return "unknown";
+    }
+}
+
+static void print_ast_node(AstNode* node, int depth) {
+    if (node == NULL) return;
+
+    for (int i = 0; i < depth; i++) printf("  ");
+
+    printf("%s", node_type_to_string(node->type));
+
+    switch (node->type) {
+        case NODE_FUNCTION:
+            printf(" '%s' returns (", node->value.function.name);
+            for (int i = 0; i < node->value.function.return_type_count; i++) {
+                if (i > 0) printf(", ");
+                printf("%s", data_type_to_string(node->value.function.return_types[i]));
+            }
+            printf(")\n");
+            print_ast_node(node->value.function.body, depth + 1);
+            break;
+
+        case NODE_RETURN:
+            printf("\n");
+            print_ast_node(node->value.return_stmt.return_value, depth + 1);
+            break;
+
+        case NODE_TUPLE:
+            printf(" with %d values:\n", node->value.tuple.value_count);
+            for (int i = 0; i < node->value.tuple.value_count; i++) {
+                print_ast_node(node->value.tuple.values[i], depth + 1);
+            }
+            break;
+
+        case NODE_LITERAL:
+            printf(" = %s\n", node->value.literal.value);
+            break;
+
+        default:
+            printf("\n");
+    }
+}
+
 static void run_test(const char* source, const char* test_name) {
     printf("\nRunning test: %s\n", test_name);
     printf("Source: %s\n", source);
@@ -649,11 +764,13 @@ static void run_test(const char* source, const char* test_name) {
     AstNode* ast = parse_function(&parser);
     if (ast != NULL) {
         printf("Successfully parsed function!\n");
-        // TODO: Add AST printer
+        printf("AST:\n");
+        print_ast_node(ast, 0);
         free_ast(ast);
     } else {
         printf("Failed to parse function!\n");
     }
+    printf("\n");
 }
 
 int main(void) {
