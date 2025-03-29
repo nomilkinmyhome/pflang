@@ -55,6 +55,7 @@ typedef enum {
     TOKEN_RIGHT_BRACE,   // }
     TOKEN_COMMA,         // ,
     TOKEN_DOT,          // .
+    TOKEN_TUPLE_TYPE,
 } TokenType;
 
 typedef struct {
@@ -75,7 +76,8 @@ typedef enum {
     NODE_BINARY_OP,
     NODE_UNARY_OP,
     NODE_VARIABLE,
-    NODE_LITERAL
+    NODE_LITERAL,
+    NODE_TUPLE,
 } NodeType;
 
 // Type system
@@ -119,7 +121,8 @@ typedef struct AstNode {
             struct AstNode** parameters;
             int param_count;
             struct AstNode* body;
-            DataType return_type;
+            DataType* return_types;
+            int return_type_count;
         } function;
 
         // Variable declaration/reference
@@ -140,7 +143,11 @@ typedef struct AstNode {
             struct AstNode* return_value;
         } return_stmt;
 
-        // Other node types...
+        // Tuple values
+        struct {
+            struct AstNode** values;
+            int value_count;
+        } tuple;
     } value;
 } AstNode;
 
@@ -445,37 +452,95 @@ static AstNode* parse_function(Parser* parser) {
         return NULL;
     }
 
-    if (match_parser(parser, TOKEN_NULL)) {
-        node->value.function.return_type = TYPE_NULL;
-    } else if (match_parser(parser, TOKEN_ERROR)) {
-        node->value.function.return_type = TYPE_ERROR;
-    } else if (match_parser(parser, TOKEN_BOOL)) {
-        node->value.function.return_type = TYPE_BOOL;
-    } else if (match_parser(parser, TOKEN_I8)) {
-        node->value.function.return_type = TYPE_I8;
-    } else if (match_parser(parser, TOKEN_I16)) {
-        node->value.function.return_type = TYPE_I16;
-    } else if (match_parser(parser, TOKEN_I32)) {
-        node->value.function.return_type = TYPE_I32;
-    } else if (match_parser(parser, TOKEN_I64)) {
-        node->value.function.return_type = TYPE_I64;
-    } else if (match_parser(parser, TOKEN_F32)) {
-        node->value.function.return_type = TYPE_F32;
-    } else if (match_parser(parser, TOKEN_F64)) {
-        node->value.function.return_type = TYPE_F64;
-    } else if (match_parser(parser, TOKEN_STR)) {
-        node->value.function.return_type = TYPE_STR;
-    } else if (match_parser(parser, TOKEN_U8)) {
-        node->value.function.return_type = TYPE_U8;
-    } else if (match_parser(parser, TOKEN_U16)) {
-        node->value.function.return_type = TYPE_U16;
-    } else if (match_parser(parser, TOKEN_U32)) {
-        node->value.function.return_type = TYPE_U32;
-    } else if (match_parser(parser, TOKEN_U64)) {
-        node->value.function.return_type = TYPE_U64;
+    if (match_parser(parser, TOKEN_LEFT_PAREN)) {
+        node->value.function.return_types = malloc(sizeof(DataType) * 8);
+        node->value.function.return_type_count = 0;
+        int capacity = 8;
+
+        do {
+            if (node->value.function.return_type_count == capacity) {
+                capacity *= 2;
+                node->value.function.return_types = realloc(
+                        node->value.function.return_types,
+                        sizeof(DataType) * capacity
+                );
+            }
+
+            if (match_parser(parser, TOKEN_NULL)) {
+                node->value.function.return_types[node->value.function.return_type_count++] = TYPE_NULL;
+            } else if (match_parser(parser, TOKEN_ERROR)) {
+                node->value.function.return_types[node->value.function.return_type_count++] = TYPE_ERROR;
+            } else if (match_parser(parser, TOKEN_BOOL)) {
+                node->value.function.return_types[node->value.function.return_type_count++] = TYPE_BOOL;
+            } else if (match_parser(parser, TOKEN_I8)) {
+                node->value.function.return_types[node->value.function.return_type_count++] = TYPE_I8;
+            } else if (match_parser(parser, TOKEN_I16)) {
+                node->value.function.return_types[node->value.function.return_type_count++] = TYPE_I16;
+            } else if (match_parser(parser, TOKEN_I32)) {
+                node->value.function.return_types[node->value.function.return_type_count++] = TYPE_I32;
+            } else if (match_parser(parser, TOKEN_I64)) {
+                node->value.function.return_types[node->value.function.return_type_count++] = TYPE_I64;
+            } else if (match_parser(parser, TOKEN_F32)) {
+                node->value.function.return_types[node->value.function.return_type_count++] = TYPE_F32;
+            } else if (match_parser(parser, TOKEN_F64)) {
+                node->value.function.return_types[node->value.function.return_type_count++] = TYPE_F64;
+            } else if (match_parser(parser, TOKEN_STR)) {
+                node->value.function.return_types[node->value.function.return_type_count++] = TYPE_STR;
+            } else if (match_parser(parser, TOKEN_U8)) {
+                node->value.function.return_types[node->value.function.return_type_count++] = TYPE_U8;
+            } else if (match_parser(parser, TOKEN_U16)) {
+                node->value.function.return_types[node->value.function.return_type_count++] = TYPE_U16;
+            } else if (match_parser(parser, TOKEN_U32)) {
+                node->value.function.return_types[node->value.function.return_type_count++] = TYPE_U32;
+            } else if (match_parser(parser, TOKEN_U64)) {
+                node->value.function.return_types[node->value.function.return_type_count++] = TYPE_U64;
+            } else {
+                error(parser, "Expected return type");
+                return NULL;
+            }
+
+        } while (match_parser(parser, TOKEN_COMMA));
+
+        if (!match_parser(parser, TOKEN_RIGHT_PAREN)) {
+            error(parser, "Expected ')' after return types");
+            return NULL;
+        }
     } else {
-        error(parser, "Expected return type");
-        return NULL;
+        node->value.function.return_types = malloc(sizeof(DataType));
+        node->value.function.return_type_count = 1;
+
+        if (match_parser(parser, TOKEN_NULL)) {
+            node->value.function.return_types[0] = TYPE_NULL;
+        } else if (match_parser(parser, TOKEN_ERROR)) {
+            node->value.function.return_types[0] = TYPE_ERROR;
+        } else if (match_parser(parser, TOKEN_BOOL)) {
+            node->value.function.return_types[0] = TYPE_BOOL;
+        } else if (match_parser(parser, TOKEN_I8)) {
+            node->value.function.return_types[0] = TYPE_I8;
+        } else if (match_parser(parser, TOKEN_I16)) {
+            node->value.function.return_types[0] = TYPE_I16;
+        } else if (match_parser(parser, TOKEN_I32)) {
+            node->value.function.return_types[0] = TYPE_I32;
+        } else if (match_parser(parser, TOKEN_I64)) {
+            node->value.function.return_types[0] = TYPE_I64;
+        } else if (match_parser(parser, TOKEN_F32)) {
+            node->value.function.return_types[0] = TYPE_F32;
+        } else if (match_parser(parser, TOKEN_F64)) {
+            node->value.function.return_types[0] = TYPE_F64;
+        } else if (match_parser(parser, TOKEN_STR)) {
+            node->value.function.return_types[0] = TYPE_STR;
+        } else if (match_parser(parser, TOKEN_U8)) {
+            node->value.function.return_types[0] = TYPE_U8;
+        } else if (match_parser(parser, TOKEN_U16)) {
+            node->value.function.return_types[0] = TYPE_U16;
+        } else if (match_parser(parser, TOKEN_U32)) {
+            node->value.function.return_types[0] = TYPE_U32;
+        } else if (match_parser(parser, TOKEN_U64)) {
+            node->value.function.return_types[0] = TYPE_U64;
+        } else {
+            error(parser, "Expected return type");
+            return NULL;
+        }
     }
 
     if (!match_parser(parser, TOKEN_COLON)) {
@@ -504,11 +569,34 @@ static AstNode* parse_return_statement(Parser* parser) {
     AstNode* node = malloc(sizeof(AstNode));
     node->type = NODE_RETURN;
 
-    if (!check(parser, TOKEN_NULL) && !check(parser, TOKEN_ERROR)) {
-        node->value.return_stmt.return_value = parse_expression(parser);
+    if (match_parser(parser, TOKEN_LEFT_PAREN)) {
+        // Multi-value return
+        struct AstNode** values = malloc(sizeof(AstNode*) * 8);
+        int count = 0;
+        int capacity = 8;
+
+        do {
+            if (count == capacity) {
+                capacity *= 2;
+                values = realloc(values, sizeof(AstNode*) * capacity);
+            }
+
+            values[count++] = parse_expression(parser);
+
+        } while (match_parser(parser, TOKEN_COMMA));
+
+        if (!match_parser(parser, TOKEN_RIGHT_PAREN)) {
+            error(parser, "Expected ')' after return values");
+            return NULL;
+        }
+
+        node->value.return_stmt.return_value = malloc(sizeof(AstNode));
+        node->value.return_stmt.return_value->type = NODE_TUPLE;
+        node->value.return_stmt.return_value->value.tuple.values = values;
+        node->value.return_stmt.return_value->value.tuple.value_count = count;
     } else {
-        advance_parser(parser);
-        node->value.return_stmt.return_value = NULL;
+        // Single-value return
+        node->value.return_stmt.return_value = parse_expression(parser);
     }
 
     return node;
@@ -524,7 +612,8 @@ static void free_ast(AstNode* node) {
                 free_ast(node->value.function.parameters[i]);
             }
             free(node->value.function.parameters);
-            free_ast(node->value.function.body);
+            free(node->value.function.body);
+            free(node->value.function.return_types);
             break;
         case NODE_RETURN:
             free_ast(node->value.return_stmt.return_value);
@@ -537,12 +626,19 @@ static void free_ast(AstNode* node) {
             free(node->value.variable.name);
             free_ast(node->value.variable.init_value);
             break;
+        case NODE_TUPLE:
+            for (int i = 0; i < node->value.tuple.value_count; i++) {
+                free_ast(node->value.tuple.values[i]);
+            }
+            free(node->value.tuple.values);
+            break;
     }
     free(node);
 }
 
-int main(void) {
-    const char* source = "f main() -> null:\n    return null";
+static void run_test(const char* source, const char* test_name) {
+    printf("\nRunning test: %s\n", test_name);
+    printf("Source: %s\n", source);
 
     Lexer lexer;
     init_lexer(&lexer, source);
@@ -555,7 +651,33 @@ int main(void) {
         printf("Successfully parsed function!\n");
         // TODO: Add AST printer
         free_ast(ast);
+    } else {
+        printf("Failed to parse function!\n");
     }
+}
+
+int main(void) {
+    const char* test1 = "f main() -> null:\n    return null";
+    run_test(test1, "Simple function with null return");
+
+    const char* test2 = "f div(a: int, b: int) -> (int, error):\n    return (a / b, null)";
+    run_test(test2, "Function with multiple return values");
+
+    const char* test3 =
+            "f div(a: int, b: int) -> (int, error):\n"
+            "    if b == 0:\n"
+            "        return (0, error(\"Division by zero\"))\n"
+            "    return (a / b, null)";
+    run_test(test3, "Function with error handling");
+
+    const char* test4 = "f process() -> (i32, str, error):\n    return (42, \"success\", null)";
+    run_test(test4, "Function with different return types");
+
+    const char* test5 = "f get_age() -> u8:\n    return 25";
+    run_test(test5, "Function with simple number return");
+
+    const char* test6 = "f get_name() -> str:\n    return \"John\"";
+    run_test(test6, "Function with string return");
 
     return 0;
 }

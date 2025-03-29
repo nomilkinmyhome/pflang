@@ -111,6 +111,14 @@ f function_name(parameter1: type1, parameter2: type2) -> return_type:
 
 The return type can be `null` if the function does not return a value.
 
+Functions also can return multiple values:
+
+```
+f function_name(parameter1: type1, parameter2: type2) -> (return_type1, return_type2):
+    // function body
+    return (value1, value2)
+```
+
 ### Control flow
 
 #### If statement
@@ -158,4 +166,13 @@ return value
 
 ```
 error("Error message, with %d and %s" % 1, "string")
+```
+
+Example of a function that returns an error:
+
+```
+f div(a: int, b: int) -> (int, error):
+    if b == 0:
+        return (0, error("Division by zero"))
+    return (a / b, null)
 ```
