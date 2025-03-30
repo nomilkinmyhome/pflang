@@ -227,6 +227,7 @@ static AstNode* parse_function(Parser* parser) {
                 free(node->value.function.parameters);
                 free_ast(node);
                 return NULL;
+                return NULL;
             }
 
             node->value.function.parameters[node->value.function.param_count++] = param;
@@ -349,6 +350,70 @@ static AstNode* parse_function(Parser* parser) {
     return node;
 }
 
+static AstNode* parse_if_statement(Parser* parser) {
+    AstNode* condition = parse_expression(parser);
+    if (condition == NULL) return NULL;
+
+    if (!match_parser(parser, TOKEN_COLON)) {
+        error(parser, "Expected ':' after if condition");
+        free_ast(condition);
+        return NULL;
+    }
+
+    int capacity = 2;
+    struct AstNode** then_branches = malloc(sizeof(AstNode*) * capacity);
+    int then_count = 0;
+
+    AstNode* then_branch = parse_statement(parser);
+    if (then_branch == NULL) {
+        free_ast(condition);
+        free(then_branches);
+        return NULL;
+    }
+    then_branches[then_count++] = then_branch;
+
+    while (match_parser(parser, TOKEN_ELSIF)) {
+        if (then_count == capacity) {
+            capacity *= 2;
+            then_branches = realloc(then_branches, sizeof(AstNode*) * capacity);
+        }
+
+        AstNode* elsif_branch = parse_statement(parser);
+        if (elsif_branch == NULL) {
+            for (int i = 0; i < then_count; i++) {
+                free_ast(then_branches[i]);
+            }
+            free(then_branches);
+            free_ast(condition);
+            return NULL;
+        }
+        then_branches[then_count++] = elsif_branch;
+    }
+
+    AstNode* else_branch = NULL;
+    if (match_parser(parser, TOKEN_ELSE)) {
+        if (!match_parser(parser, TOKEN_COLON)) {
+            error(parser, "Expected ':' after else");
+            for (int i = 0; i < then_count; i++) {
+                free_ast(then_branches[i]);
+            }
+            free(then_branches);
+            free_ast(condition);
+            return NULL;
+        }
+        else_branch = parse_statement(parser);
+    }
+
+    AstNode* node = malloc(sizeof(AstNode));
+    node->type = NODE_IF;
+    node->value.if_stmt.condition = condition;
+    node->value.if_stmt.then_branches = then_branches;
+    node->value.if_stmt.then_branches_count = then_count;
+    node->value.if_stmt.else_branch = else_branch;
+
+    return node;
+}
+
 static AstNode* parse_expression(Parser* parser) {
     return parse_equality(parser);
 }
@@ -356,6 +421,9 @@ static AstNode* parse_expression(Parser* parser) {
 static AstNode* parse_statement(Parser* parser) {
     if (match_parser(parser, TOKEN_RETURN)) {
         return parse_return_statement(parser);
+    }
+    if (match_parser(parser, TOKEN_IF)) {
+        return parse_if_statement(parser);
     }
     return parse_expression(parser);
 }

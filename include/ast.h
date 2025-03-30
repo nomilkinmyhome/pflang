@@ -76,6 +76,14 @@ typedef struct AstNode {
             TokenType operator;
             struct AstNode* operand;
         } unary_op;
+
+        // If statement
+        struct {
+            struct AstNode* condition;
+            struct AstNode** then_branches;
+            int then_branches_count;
+            struct AstNode* else_branch;
+        } if_stmt;
     } value;
 } AstNode;
 

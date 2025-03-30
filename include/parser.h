@@ -37,5 +37,6 @@ static AstNode* parse_factor(Parser* parser);
 static AstNode* parse_term(Parser* parser);
 static AstNode* parse_comparison(Parser* parser);
 static AstNode* parse_equality(Parser* parser);
+static AstNode* parse_if_statement(Parser* parser);
 
 #endif // PFLANG_PARSER_H

@@ -110,6 +110,13 @@ void free_ast(AstNode* node) {
         case NODE_UNARY_OP:
             free_ast(node->value.unary_op.operand);
             break;
+        case NODE_IF:
+            free_ast(node->value.if_stmt.condition);
+            for (int i = 0; i < node->value.if_stmt.then_branches_count; i++) {
+                free_ast(node->value.if_stmt.then_branches[i]);
+            }
+            free_ast(node->value.if_stmt.else_branch);
+            break;
     }
 
     free(node);
@@ -251,6 +258,26 @@ void print_ast(AstNode* node, int indent_level) {
             print_indent(indent_level + 1);
             printf("OPERAND:\n");
             print_ast(node->value.unary_op.operand, indent_level + 2);
+            break;
+
+        case NODE_IF:
+            print_indent(indent_level);
+            printf("IF:\n");
+            print_indent(indent_level + 1);
+            printf("CONDITION:\n");
+            print_ast(node->value.if_stmt.condition, indent_level + 2);
+
+            for (int i = 0; i < node->value.if_stmt.then_branches_count; i++) {
+                print_indent(indent_level + 1);
+                printf(i == 0 ? "THEN:\n" : "ELSIF:\n");
+                print_ast(node->value.if_stmt.then_branches[i], indent_level + 2);
+            }
+
+            if (node->value.if_stmt.else_branch) {
+                print_indent(indent_level + 1);
+                printf("ELSE:\n");
+                print_ast(node->value.if_stmt.else_branch, indent_level + 2);
+            }
             break;
             
         default:
