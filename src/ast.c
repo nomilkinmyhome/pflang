@@ -50,6 +50,14 @@ AstNode* create_tuple_node(AstNode** values, int value_count) {
     return node;
 }
 
+AstNode* create_function_call_node(char* name, AstNode** arguments, int argument_count) {
+    AstNode* node = create_node(NODE_FUNCTION_CALL);
+    node->value.function_call.name = name;
+    node->value.function_call.arguments = arguments;
+    node->value.function_call.argument_count = argument_count;
+    return node;
+}
+
 AstNode* create_literal_node(char* value, DataType type) {
     AstNode* node = create_node(NODE_LITERAL);
     node->value.literal.value = value;
@@ -116,6 +124,12 @@ void free_ast(AstNode* node) {
                 free_ast(node->value.if_stmt.then_branches[i]);
             }
             free_ast(node->value.if_stmt.else_branch);
+            break;
+        case NODE_BLOCK:
+            for (int i = 0; i < node->value.block.statement_count; i++) {
+                free_ast(node->value.block.statements[i]);
+            }
+            free(node->value.block.statements);
             break;
     }
 
@@ -277,6 +291,25 @@ void print_ast(AstNode* node, int indent_level) {
                 print_indent(indent_level + 1);
                 printf("ELSE:\n");
                 print_ast(node->value.if_stmt.else_branch, indent_level + 2);
+            }
+            break;
+
+        case NODE_BLOCK:
+            printf("BLOCK:\n");
+            for (int i = 0; i < node->value.block.statement_count; i++) {
+                print_ast(node->value.block.statements[i], indent_level + 1);
+            }
+            break;
+
+        case NODE_FUNCTION_CALL:
+            print_indent(indent_level);
+            printf("FUNCTION_CALL: %s\n", node->value.function_call.name);
+            if (node->value.function_call.argument_count > 0) {
+                print_indent(indent_level + 1);
+                printf("ARGUMENTS (%d):\n", node->value.function_call.argument_count);
+                for (int i = 0; i < node->value.function_call.argument_count; i++) {
+                    print_ast(node->value.function_call.arguments[i], indent_level + 2);
+                }
             }
             break;
             

@@ -18,6 +18,7 @@ typedef enum {
     NODE_VARIABLE,
     NODE_LITERAL,
     NODE_TUPLE,
+    NODE_FUNCTION_CALL,
 } NodeType;
 
 // AST node structure
@@ -71,6 +72,13 @@ typedef struct AstNode {
             DataType type;
         } parameter;
 
+        // Function call
+        struct {
+            char* name;
+            struct AstNode** arguments;
+            int argument_count;
+        } function_call;
+
         // Unary operator
         struct {
             TokenType operator;
@@ -84,6 +92,12 @@ typedef struct AstNode {
             int then_branches_count;
             struct AstNode* else_branch;
         } if_stmt;
+
+        // Block of statements
+        struct {
+            struct AstNode** statements;
+            int statement_count;
+        } block;
     } value;
 } AstNode;
 
