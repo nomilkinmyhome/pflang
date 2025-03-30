@@ -36,25 +36,25 @@ int main(int argc, char* argv[]) {
     }
 
     char* source = read_file(argv[1]);
-    
+    printf("Debug: Source code:\n%s\n", source);
+
     Lexer lexer;
     init_lexer(&lexer, source);
-    
+
     Parser parser;
     init_parser(&parser, &lexer);
 
-    printf("Tokens:\n");
-    Token token;
-    do {
-        token = scan_token(&lexer);
-        printf("%s: '%s' at line %d, column %d\n", 
-               token_type_to_string(token.type), 
-               token.lexeme, 
-               token.line, 
-               token.column);
-        free_token(&token);
-    } while (token.type != TOKEN_EOF);
-    
+    AstNode* ast = parse(&parser);
+    if (ast == NULL) {
+        fprintf(stderr, "Failed to parse\n");
+        free(source);
+        return 1;
+    }
+
+    printf("AST Structure:\n");
+    print_ast(ast, 0);
+
+    free_ast(ast);
     free(source);
     return 0;
 }

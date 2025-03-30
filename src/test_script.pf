@@ -1,0 +1,4 @@
+﻿f div(a: int, b: int) -> (int, error):
+    if b == 0:
+        return (0, error("Division by zero"))
+    return (a / b, null)
