@@ -12,6 +12,7 @@ extern void test_line_column_tracking();
 extern void test_parser_init();
 extern void test_parser_error_handling();
 extern void test_basic_parsing();
+extern void test_variable_declaration();
 
 // Function syntax test functions
 extern void test_simple_function_with_null();
@@ -20,6 +21,7 @@ extern void test_function_with_error_handling();
 extern void test_function_with_different_return_types();
 extern void test_function_with_simple_number_return();
 extern void test_function_with_string_return();
+extern void test_function_with_variable_declarations();
 
 int main() {
     printf("==============================\n");
@@ -36,6 +38,7 @@ int main() {
     test_function_with_different_return_types();
     test_function_with_simple_number_return();
     test_function_with_string_return();
+    test_function_with_variable_declarations();
 
     /*
     // Run lexer tests
@@ -48,7 +51,8 @@ int main() {
     test_literals();
     test_whitespace_comments();
     test_line_column_tracking();
-    
+    */
+
     // Run parser tests
     printf("\n==============================\n");
     printf("PARSER TESTS\n");
@@ -56,7 +60,8 @@ int main() {
     test_parser_init();
     test_parser_error_handling();
     test_basic_parsing();
-    */
+    test_variable_declaration();
+
     printf("\n==============================\n");
     printf("All tests completed\n");
     printf("==============================\n");

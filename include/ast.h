@@ -40,6 +40,8 @@ typedef struct AstNode {
         struct {
             char* name;
             struct AstNode* init_value;
+            DataType type;
+            bool is_optional;
         } variable;
 
         // Binary operation
@@ -104,7 +106,7 @@ typedef struct AstNode {
 // AST functions
 AstNode* create_function_node(char* name, AstNode** parameters, int param_count, 
                              AstNode* body, DataType* return_types, int return_type_count);
-AstNode* create_variable_node(char* name, AstNode* init_value);
+AstNode* create_variable_node(char* name, AstNode* init_value, DataType type, bool is_optional);
 AstNode* create_binary_op_node(AstNode* left, AstNode* right, TokenType operator);
 AstNode* create_return_node(AstNode* return_value);
 AstNode* create_tuple_node(AstNode** values, int value_count);

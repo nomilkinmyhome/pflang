@@ -36,6 +36,32 @@ static void error(Parser* parser, const char* message) {
             message);
 }
 
+static DataType token_type_to_data_type(TokenType type) {
+    switch (type) {
+        case TOKEN_U8: return TYPE_U8;
+        case TOKEN_U16: return TYPE_U16;
+        case TOKEN_U32: return TYPE_U32;
+        case TOKEN_U64: return TYPE_U64;
+        case TOKEN_I8: return TYPE_I8;
+        case TOKEN_I16: return TYPE_I16;
+        case TOKEN_I32: return TYPE_I32;
+        case TOKEN_I64: return TYPE_I64;
+        case TOKEN_F32: return TYPE_F32;
+        case TOKEN_F64: return TYPE_F64;
+        case TOKEN_STR: return TYPE_STR;
+        case TOKEN_BOOL: return TYPE_BOOL;
+        case TOKEN_NULL: return TYPE_NULL;
+        case TOKEN_ERROR: return TYPE_ERROR;
+        default: return TYPE_NULL;
+    }
+}
+
+static bool is_type_token(TokenType type) {
+    return type == TOKEN_U8 || type == TOKEN_U16 || type == TOKEN_U32 || type == TOKEN_U64 ||
+           type == TOKEN_I8 || type == TOKEN_I16 || type == TOKEN_I32 || type == TOKEN_I64 ||
+           type == TOKEN_F32 || type == TOKEN_F64 || type == TOKEN_STR || type == TOKEN_BOOL;
+}
+
 static AstNode* make_binary_op(AstNode* left, TokenType operator, AstNode* right) {
     AstNode* node = malloc(sizeof(AstNode));
     node->type = NODE_BINARY_OP;
@@ -532,6 +558,43 @@ static AstNode* parse_expression(Parser* parser) {
     return parse_equality(parser);
 }
 
+static AstNode* parse_variable_declaration(Parser* parser) {
+    bool is_optional = false;
+
+    if (match_parser(parser, TOKEN_OPTIONAL)) {
+        is_optional = true;
+    }
+
+    if (!is_type_token(parser->current.type)) {
+        error(parser, "Expected type name");
+        return NULL;
+    }
+    
+    DataType var_type = token_type_to_data_type(parser->current.type);
+    advance_parser(parser);
+
+    if (!match_parser(parser, TOKEN_IDENTIFIER)) {
+        error(parser, "Expected variable name");
+        return NULL;
+    }
+    
+    char* var_name = strdup(parser->previous.lexeme);
+
+    if (!match_parser(parser, TOKEN_ASSIGNMENT)) {
+        error(parser, "Expected '=' after variable name");
+        free(var_name);
+        return NULL;
+    }
+
+    AstNode* init_value = parse_expression(parser);
+    if (init_value == NULL) {
+        free(var_name);
+        return NULL;
+    }
+
+    return create_variable_node(var_name, init_value, var_type, is_optional);
+}
+
 static AstNode* parse_statement(Parser* parser) {
     if (match_parser(parser, TOKEN_RETURN)) {
         return parse_return_statement(parser);
@@ -539,6 +602,15 @@ static AstNode* parse_statement(Parser* parser) {
     if (match_parser(parser, TOKEN_IF)) {
         return parse_if_statement(parser);
     }
+
+    if (match_parser(parser, TOKEN_OPTIONAL) || is_type_token(parser->current.type)) {
+        // If we matched TOKEN_OPTIONAL, we need to rewind
+        if (parser->previous.type == TOKEN_OPTIONAL) {
+            parser->current = parser->previous;
+        }
+        return parse_variable_declaration(parser);
+    }
+    
     return parse_expression(parser);
 }
 
@@ -587,11 +659,6 @@ static AstNode* parse_return_statement(Parser* parser) {
             tuple->value.tuple.values = values;
             tuple->value.tuple.value_count = count;
             node->value.return_stmt.return_value = tuple;
-
-            // node->value.return_stmt.return_value = malloc(sizeof(AstNode));
-            // node->value.return_stmt.return_value->type = NODE_TUPLE;
-            // node->value.return_stmt.return_value->value.tuple.values = values;
-            // node->value.return_stmt.return_value->value.tuple.value_count = count;
         } else {
             node->value.return_stmt.return_value = values[0];
             free(values);

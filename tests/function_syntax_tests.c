@@ -112,4 +112,19 @@ void test_function_with_string_return() {
     print_test_results(&stats);
 }
 
-// Main function removed as tests are now called from run_tests.c
+// Test function with variable declarations
+void test_function_with_variable_declarations() {
+    TestStats stats;
+    init_test_stats(&stats);
+    
+    const char* test = 
+        "f some_func(a: u8, b: str) -> null:\n"
+        "    print(b)\n"
+        "    u8 second_operand = u8(2)\n"
+        "    print(a * second_operand)\n"
+        "    optional int maybe_value = null\n"
+        "    return null";
+    run_function_syntax_test(test, "Function with variable declarations", &stats);
+    
+    print_test_results(&stats);
+}

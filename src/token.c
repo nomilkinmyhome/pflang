@@ -16,6 +16,7 @@ const char* token_type_to_string(TokenType type) {
         case TOKEN_ELSIF: return "ELSIF";
         case TOKEN_WHILE: return "WHILE";
         case TOKEN_FOR: return "FOR";
+        case TOKEN_OPTIONAL: return "OPTIONAL";
         case TOKEN_NULL: return "NULL";
         case TOKEN_ERROR: return "ERROR";
         case TOKEN_I8: return "I8";

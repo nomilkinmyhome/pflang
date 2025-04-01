@@ -15,6 +15,7 @@ typedef enum {
     TOKEN_FOR,          // 'for'
     TOKEN_BREAK,        // 'break'
     TOKEN_CONTINUE,     // 'continue'
+    TOKEN_OPTIONAL,     // 'optional'
 
     // Types
     TOKEN_U8,

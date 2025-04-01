@@ -22,10 +22,13 @@ AstNode* create_function_node(char* name, AstNode** parameters, int param_count,
     return node;
 }
 
-AstNode* create_variable_node(char* name, AstNode* init_value) {
+AstNode* create_variable_node(char* name, AstNode* init_value, DataType type, bool is_optional) {
     AstNode* node = create_node(NODE_VARIABLE);
     node->value.variable.name = name;
     node->value.variable.init_value = init_value;
+    node->value.variable.type = type;
+    node->value.variable.is_optional = is_optional;
+    node->data_type = type;
     return node;
 }
 
@@ -142,26 +145,6 @@ static void print_indent(int level) {
     }
 }
 
-static const char* data_type_to_string(DataType type) {
-    switch (type) {
-        case TYPE_I8: return "i8";
-        case TYPE_I16: return "i16";
-        case TYPE_I32: return "i32";
-        case TYPE_I64: return "i64";
-        case TYPE_U8: return "u8";
-        case TYPE_U16: return "u16";
-        case TYPE_U32: return "u32";
-        case TYPE_U64: return "u64";
-        case TYPE_F32: return "f32";
-        case TYPE_F64: return "f64";
-        case TYPE_BOOL: return "bool";
-        case TYPE_STR: return "str";
-        case TYPE_NULL: return "null";
-        case TYPE_ERROR: return "error";
-        default: return "unknown";
-    }
-}
-
 static const char* token_type_to_operator_string(TokenType type) {
     switch (type) {
         case TOKEN_PLUS: return "+";
@@ -176,6 +159,31 @@ static const char* token_type_to_operator_string(TokenType type) {
         case TOKEN_GREATER_EQUAL: return ">=";
         case TOKEN_AND: return "&&";
         case TOKEN_OR: return "||";
+        default: return "unknown";
+    }
+}
+
+// Convert data type to string
+static const char* data_type_to_string(DataType type) {
+    switch (type) {
+        case TYPE_U8: return "u8";
+        case TYPE_U16: return "u16";
+        case TYPE_U32: return "u32";
+        case TYPE_U64: return "u64";
+        case TYPE_I8: return "i8";
+        case TYPE_I16: return "i16";
+        case TYPE_I32: return "i32";
+        case TYPE_I64: return "i64";
+        case TYPE_F32: return "f32";
+        case TYPE_F64: return "f64";
+        case TYPE_STR: return "str";
+        case TYPE_BOOL: return "bool";
+        case TYPE_NULL: return "null";
+        case TYPE_ERROR: return "error";
+        case TYPE_TUPLE: return "tuple";
+        case TYPE_ARRAY: return "array";
+        case TYPE_LIST: return "list";
+        case TYPE_MAP: return "map";
         default: return "unknown";
     }
 }
@@ -212,7 +220,10 @@ void print_ast(AstNode* node, int indent_level) {
             
         case NODE_VARIABLE:
             print_indent(indent_level);
-            printf("VARIABLE: %s\n", node->value.variable.name);
+            printf("VARIABLE: %s (type: %s, optional: %s)\n", 
+                   node->value.variable.name, 
+                   data_type_to_string(node->value.variable.type),
+                   node->value.variable.is_optional ? "true" : "false");
             if (node->value.variable.init_value) {
                 print_indent(indent_level + 1);
                 printf("INIT VALUE:\n");
