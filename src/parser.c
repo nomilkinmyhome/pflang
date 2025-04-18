@@ -1,5 +1,9 @@
 #include "../include/parser.h"
 
+// Forward declarations
+static AstNode* parse_expression(Parser* parser);
+static AstNode* parse_comparison(Parser* parser);
+
 static void advance_parser(Parser* parser) {
     parser->previous = parser->current;
     parser->current = scan_token(parser->lexer);
@@ -59,7 +63,8 @@ static DataType token_type_to_data_type(TokenType type) {
 static bool is_type_token(TokenType type) {
     return type == TOKEN_U8 || type == TOKEN_U16 || type == TOKEN_U32 || type == TOKEN_U64 ||
            type == TOKEN_I8 || type == TOKEN_I16 || type == TOKEN_I32 || type == TOKEN_I64 ||
-           type == TOKEN_F32 || type == TOKEN_F64 || type == TOKEN_STR || type == TOKEN_BOOL;
+           type == TOKEN_F32 || type == TOKEN_F64 || type == TOKEN_STR || type == TOKEN_BOOL ||
+           type == TOKEN_NULL || type == TOKEN_ERROR;
 }
 
 static AstNode* make_binary_op(AstNode* left, TokenType operator, AstNode* right) {
@@ -326,7 +331,6 @@ static AstNode* parse_function(Parser* parser) {
                 free(node->value.function.parameters);
                 free_ast(node);
                 return NULL;
-                return NULL;
             }
 
             node->value.function.parameters[node->value.function.param_count++] = param;
@@ -463,7 +467,9 @@ static AstNode* parse_function(Parser* parser) {
     while (!check(parser, TOKEN_EOF) &&
            (check(parser, TOKEN_IF) ||
             check(parser, TOKEN_RETURN) ||
-            check(parser, TOKEN_IDENTIFIER))) {
+            check(parser, TOKEN_IDENTIFIER) ||
+            check(parser, TOKEN_OPTIONAL) ||
+            is_type_token(parser->current.type))) {
 
         if (block->value.block.statement_count == capacity) {
             capacity *= 2;
@@ -565,12 +571,18 @@ static AstNode* parse_variable_declaration(Parser* parser) {
         is_optional = true;
     }
 
-    if (!is_type_token(parser->current.type)) {
+    if (!is_type_token(parser->current.type) && 
+        !(parser->current.type == TOKEN_IDENTIFIER && strcmp(parser->current.lexeme, "int") == 0)) {
         error(parser, "Expected type name");
         return NULL;
     }
-    
-    DataType var_type = token_type_to_data_type(parser->current.type);
+
+    DataType var_type;
+    if (parser->current.type == TOKEN_IDENTIFIER && strcmp(parser->current.lexeme, "int") == 0) {
+        var_type = TYPE_I32;
+    } else {
+        var_type = token_type_to_data_type(parser->current.type);
+    }
     advance_parser(parser);
 
     if (!match_parser(parser, TOKEN_IDENTIFIER)) {
@@ -603,14 +615,16 @@ static AstNode* parse_statement(Parser* parser) {
         return parse_if_statement(parser);
     }
 
-    if (match_parser(parser, TOKEN_OPTIONAL) || is_type_token(parser->current.type)) {
-        // If we matched TOKEN_OPTIONAL, we need to rewind
+    if (match_parser(parser, TOKEN_OPTIONAL) || 
+        is_type_token(parser->current.type) || 
+        (parser->current.type == TOKEN_IDENTIFIER && strcmp(parser->current.lexeme, "int") == 0)) {
+
         if (parser->previous.type == TOKEN_OPTIONAL) {
             parser->current = parser->previous;
         }
         return parse_variable_declaration(parser);
     }
-    
+
     return parse_expression(parser);
 }
 
@@ -691,7 +705,12 @@ static AstNode* parse_parameter(Parser* parser) {
         return NULL;
     }
 
-    if (match_parser(parser, TOKEN_U8)) {
+    // Handle STR type explicitly
+    if (match_parser(parser, TOKEN_STR)) {
+        param->value.parameter.type = TYPE_STR;
+    } 
+    // Handle other type tokens
+    else if (match_parser(parser, TOKEN_U8)) {
         param->value.parameter.type = TYPE_U8;
     } else if (match_parser(parser, TOKEN_U16)) {
         param->value.parameter.type = TYPE_U16;
@@ -711,12 +730,12 @@ static AstNode* parse_parameter(Parser* parser) {
         param->value.parameter.type = TYPE_F32;
     } else if (match_parser(parser, TOKEN_F64)) {
         param->value.parameter.type = TYPE_F64;
-    } else if (match_parser(parser, TOKEN_STR)) {
-        param->value.parameter.type = TYPE_STR;
     } else if (match_parser(parser, TOKEN_BOOL)) {
         param->value.parameter.type = TYPE_BOOL;
     } else if (match_parser(parser, TOKEN_NULL)) {
         param->value.parameter.type = TYPE_NULL;
+    } else if (match_parser(parser, TOKEN_ERROR)) {
+        param->value.parameter.type = TYPE_ERROR;
     } else if (match_parser(parser, TOKEN_IDENTIFIER) && strcmp(parser->previous.lexeme, "int") == 0) {
         param->value.parameter.type = TYPE_I32;
     } else {

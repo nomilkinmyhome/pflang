@@ -1,0 +1,2 @@
+f some_func(a: u8, b: str) -> null:
+    return null

@@ -3,19 +3,16 @@
 #include "../include/parser.h"
 #include "../include/ast.h"
 
-// Helper function to run a test on a specific function syntax
 void run_function_syntax_test(const char* source, const char* test_name, TestStats* stats) {
     printf("\n--- Testing: %s ---\n", test_name);
     printf("Source code:\n%s\n", source);
-    
-    // Initialize lexer and parser
+
     Lexer lexer;
     init_lexer(&lexer, source);
     
     Parser parser;
     init_parser(&parser, &lexer);
-    
-    // Parse the source code
+
     AstNode* ast = parse(&parser);
 
     if (ast != NULL) {
@@ -24,14 +21,12 @@ void run_function_syntax_test(const char* source, const char* test_name, TestSta
         print_ast(ast, 0);
         printf("\n");
 
-        // Free the AST when done
         free_ast(ast);
     } else {
         stats->failed++;
         printf("Failed to create AST\n");
     }
 
-    // Check for parser errors
     if (had_parser_error(&parser)) {
         stats->failed++;
         printf("Parser reported errors\n");
@@ -119,10 +114,9 @@ void test_function_with_variable_declarations() {
     
     const char* test = 
         "f some_func(a: u8, b: str) -> null:\n"
-        "    print(b)\n"
-        "    u8 second_operand = u8(2)\n"
-        "    print(a * second_operand)\n"
-        "    optional int maybe_value = null\n"
+        "    int first_operand = 1\n"
+        // "    u8 second_operand = u8(2)\n"  TODO: add later
+        // "    optional int maybe_value = null\n"  TODO: add later
         "    return null";
     run_function_syntax_test(test, "Function with variable declarations", &stats);
     

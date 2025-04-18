@@ -30,12 +30,16 @@ const char* data_type_to_string(DataType type) {
 }
 
 int main(int argc, char* argv[]) {
+    char* source;
+    
     if (argc != 2) {
-        fprintf(stderr, "Usage: pflang [file]\n");
-        exit(64);
+        // If no file is provided, use the test_function.pf file
+        source = read_file("test_function.pf");
+        printf("No file provided, using test_function.pf\n");
+    } else {
+        source = read_file(argv[1]);
     }
-
-    char* source = read_file(argv[1]);
+    
     printf("Debug: Source code:\n%s\n", source);
 
     Lexer lexer;
