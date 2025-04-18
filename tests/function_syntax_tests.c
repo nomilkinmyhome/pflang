@@ -3,6 +3,16 @@
 #include "../include/parser.h"
 #include "../include/ast.h"
 
+// Function prototypes
+void test_simple_function_with_null();
+void test_function_with_multiple_returns();
+void test_function_with_error_handling();
+void test_function_with_different_return_types();
+void test_function_with_simple_number_return();
+void test_function_with_string_return();
+void test_function_with_variable_declarations();
+void test_function_with_invalid_variable_declaration();
+
 void run_function_syntax_test(const char* source, const char* test_name, TestStats* stats) {
     printf("\n--- Testing: %s ---\n", test_name);
     printf("Source code:\n%s\n", source);
@@ -28,10 +38,21 @@ void run_function_syntax_test(const char* source, const char* test_name, TestSta
     }
 
     if (had_parser_error(&parser)) {
-        stats->failed++;
-        printf("Parser reported errors\n");
+        // For tests that expect errors, we don't count this as a failure
+        if (strstr(test_name, "Expected Error") != NULL) {
+            stats->passed++;
+            printf("Parser reported expected errors\n");
+        } else {
+            stats->failed++;
+            printf("Parser reported errors\n");
+        }
     } else {
-        stats->passed++;
+        if (strstr(test_name, "Expected Error") != NULL) {
+            stats->failed++;
+            printf("Parser did not report expected errors\n");
+        } else {
+            stats->passed++;
+        }
     }
 
     stats->total = stats->passed + stats->failed;
@@ -116,7 +137,7 @@ void test_function_with_variable_declarations() {
         "f some_func(a: u8, b: str) -> null:\n"
         "    int first_operand = 1\n"
         // "    u8 second_operand = u8(2)\n"  TODO: add later
-        // "    optional int maybe_value = null\n"  TODO: add later
+        "    optional int maybe_value = null\n"
         "    return null";
     run_function_syntax_test(test, "Function with variable declarations", &stats);
     

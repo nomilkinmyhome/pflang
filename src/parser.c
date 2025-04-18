@@ -567,8 +567,9 @@ static AstNode* parse_expression(Parser* parser) {
 static AstNode* parse_variable_declaration(Parser* parser) {
     bool is_optional = false;
 
-    if (match_parser(parser, TOKEN_OPTIONAL)) {
+    if (parser->current.type == TOKEN_OPTIONAL) {
         is_optional = true;
+        advance_parser(parser);
     }
 
     if (!is_type_token(parser->current.type) && 
@@ -604,6 +605,16 @@ static AstNode* parse_variable_declaration(Parser* parser) {
         return NULL;
     }
 
+    if (is_optional && init_value->type == NODE_LITERAL && 
+        init_value->value.literal.type == TYPE_NULL) {
+    } else if (is_optional == false && init_value->type == NODE_LITERAL && 
+               init_value->value.literal.type == TYPE_NULL) {
+        error(parser, "Cannot initialize non-optional variable with null");
+        free(var_name);
+        free_ast(init_value);
+        return NULL;
+    }
+
     return create_variable_node(var_name, init_value, var_type, is_optional);
 }
 
@@ -615,13 +626,11 @@ static AstNode* parse_statement(Parser* parser) {
         return parse_if_statement(parser);
     }
 
-    if (match_parser(parser, TOKEN_OPTIONAL) || 
+    // Check for variable declaration
+    if (parser->current.type == TOKEN_OPTIONAL || 
         is_type_token(parser->current.type) || 
         (parser->current.type == TOKEN_IDENTIFIER && strcmp(parser->current.lexeme, "int") == 0)) {
-
-        if (parser->previous.type == TOKEN_OPTIONAL) {
-            parser->current = parser->previous;
-        }
+        
         return parse_variable_declaration(parser);
     }
 
